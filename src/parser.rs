@@ -1,8 +1,8 @@
 use grammar::*;
 use grammar_lexer::*;
-use peruse::parsers::*;
 
 use peruse::slice_parsers::*;
+use peruse::parsers::*;
 
 pub fn program() -> Box<Parser<I=[Token], O=Block>> {
 
@@ -76,8 +76,68 @@ pub fn program() -> Box<Parser<I=[Token], O=Block>> {
             .map(|(target, expr)| Statement::Assign(target, expr)))
         };
 
+        let comparator = || matcher(|token| match token {
+            Token::Cmp(cmp) => Some(cmp),
+            _ => None
+        });
 
-        let statements = assignment.then_l(lit(Token::NewLine)).repeat();
+        fn code_block() -> Box<Parser<I=[Token], O=Block>> {
+            Box::new(lit(Token::OpenBrace)
+            .then_r(recursive(|| program()))
+            .then_l(lit(Token::CloseBrace)))
+        }
+
+        fn if_stmt() -> Box<Parser<I=[Token], O=Statement>> {
+
+            let comparator = || matcher(|token| match token {
+                Token::Cmp(cmp) => Some(cmp),
+                _ => None
+            });
+
+
+            let else_block = lit(Token::ElseKeyword)
+            .then_r(
+                recursive(if_stmt).map(|i| Block(vec![i]))
+                .or(boxed(recursive(|| code_block())))
+            );
+
+            let p = lit(Token::IfKeyword)
+            .then_r(recursive(|| expression()))
+            .then(comparator())
+            .then(recursive(expression))
+            .then_l(lit(Token::OpenBrace))
+            .then(recursive(program))
+            .then_l(lit(Token::CloseBrace))
+            .then(opt(else_block))
+            .map(|((((l, cmp), r), block), else_opt)| Statement::If(l, cmp, r, block, else_opt));
+
+            Box::new(p)
+        };
+
+        let while_stmt = {
+            let p = lit(Token::WhileKeyword)
+            .then_r(recursive(expression))
+            .then(comparator())
+            .then(recursive(expression))
+            .then_l(lit(Token::OpenBrace))
+            .then(recursive(program))
+            .then_l(lit(Token::CloseBrace))
+            .map(|(((l, cmp), r), block)| Statement::While(l, cmp, r, block));
+            boxed(p)
+        };
+
+        let loop_stmt = {
+            let p = lit(Token::LoopKeyword)
+            .then_r(recursive(expression))
+            .then_l(lit(Token::OpenBrace))
+            .then(recursive(program))
+            .then_l(lit(Token::CloseBrace))
+            .map(|(l, block)| Statement::Loop(l, block));
+            boxed(p)
+        };
+        let output = boxed(lit(Token::OutputCmd).then_r(recursive(|| expression())).map(|e| Statement::Output(e)));
+
+        let statements = one_of(vec![assignment, output, boxed(recursive(|| if_stmt())), while_stmt, loop_stmt]).then_l(lit(Token::NewLine)).repeat();
 
         Box::new(statements.map(|v| Block(v)))
     }

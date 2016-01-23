@@ -14,7 +14,7 @@ pub fn token() -> Box<Parser<I=str, O=Vec<Token>>> {
     str_lit(&(String::from_str(r"^[ \t]*").unwrap() + s), t)
   }
 
-  let ident = capture(r"^[ \t]*([a-zA-Z]\w*)[ \t]*", |caps| Token::Ident(caps.at(1).unwrap().to_string()));
+  let ident = capture(r"^[ \t]*([a-zA-Z]\w*)[ \t]*", |caps| Token::Ident(String::from_str(caps.at(1).unwrap()).unwrap()));
 
   let number = capture(r"^[ \t]*(\d+)[ \t]*", |caps| Token::Number(FromStr::from_str(caps.at(1).unwrap()).unwrap()));
 
